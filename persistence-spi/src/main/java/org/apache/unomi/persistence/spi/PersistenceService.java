@@ -444,6 +444,22 @@ public interface PersistenceService {
 
     /**
      * Retrieves a list of items satisfying the specified {@link Condition}, ordered according to the specified {@code sortBy} String and and paged: only {@code size} of them
+     * are retrieved, starting with the {@code offset}-th one.
+     *
+     * @param <T>    the type of the Item subclass we want to retrieve
+     * @param query  the {@link Condition} the items must satisfy to be retrieved
+     * @param sortBy an optional ({@code null} if no sorting is required) String of comma ({@code ,}) separated property names on which ordering should be performed, ordering
+     *               elements according to the property order in the
+     *               String, considering each in turn and moving on to the next one in case of equality of all preceding ones. Each property name is optionally followed by
+     *               a column ({@code :}) and an order specifier: {@code asc} or {@code desc}.
+     * @param clazz  the {@link Item} subclass of the items we want to retrieve
+     * @param returnHiddenFields - if true, hidden fields that are defined in configuration will be returned as well
+     * @return a {@link PartialList} of items matching the specified criteria
+     */
+    <T extends Item> PartialList<T> query(Condition query, String sortBy, Class<T> clazz, boolean returnHiddenFields);
+
+    /**
+     * Retrieves a list of items satisfying the specified {@link Condition}, ordered according to the specified {@code sortBy} String and and paged: only {@code size} of them
      * are retrieved, starting with the {@code offset}-th one. If a scroll identifier and time validity are specified, they will be used to perform a scrolling query, meaning
      * that only partial results will be returned, but the scrolling can be continued.
      *

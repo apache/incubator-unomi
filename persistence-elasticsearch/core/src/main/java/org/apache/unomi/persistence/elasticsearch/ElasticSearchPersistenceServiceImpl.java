@@ -17,6 +17,8 @@
 
 package org.apache.unomi.persistence.elasticsearch;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hazelcast.core.HazelcastInstance;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpHost;
@@ -242,6 +244,7 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
     private boolean aggQueryThrowOnMissingDocs = false;
     private Integer aggQueryMaxResponseSizeHttp = null;
     private Integer clientSocketTimeout = null;
+    private Map<String, String[]> itemTypeToHiddenFields = new HashMap<>();
 
     private Map<String, Map<String, Map<String, Object>>> knownMappings = new HashMap<>();
 
@@ -259,6 +262,13 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
         elasticSearchAddressList.clear();
         for (String elasticSearchAddress : elasticSearchAddressesArray) {
             elasticSearchAddressList.add(elasticSearchAddress.trim());
+        }
+    }
+
+    public void setItemTypeToHiddenFields(String itemTypeToHiddenFields) throws IOException {
+        if (!itemTypeToHiddenFields.isEmpty()) {
+            this.itemTypeToHiddenFields = new ObjectMapper().readValue(itemTypeToHiddenFields,
+                    new TypeReference<HashMap<String, String[]>>() {});
         }
     }
 
@@ -749,7 +759,7 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
     public <T extends Item> PartialList<T> getAllItems(final Class<T> clazz, int offset, int size, String sortBy, String scrollTimeValidity) {
         long startTime = System.currentTimeMillis();
         try {
-            return query(QueryBuilders.matchAllQuery(), sortBy, clazz, offset, size, null, scrollTimeValidity);
+            return query(QueryBuilders.matchAllQuery(), sortBy, clazz, offset, size, null, scrollTimeValidity, false);
         } finally {
             if (metricsService != null && metricsService.isActivated()) {
                 metricsService.updateTimer(this.getClass().getName() + ".getAllItems", startTime);
@@ -797,7 +807,7 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
                         return new MetricAdapter<T>(metricsService, ".loadItemWithQuery") {
                             @Override
                             public T execute(Object... args) throws Exception {
-                                PartialList<T> r = query(QueryBuilders.idsQuery().addIds(itemId), null, clazz, 0, 1, null, null);
+                                PartialList<T> r = query(QueryBuilders.idsQuery().addIds(itemId), null, clazz, 0, 1, null, null, false);
                                 if (r.size() > 0) {
                                     return r.get(0);
                                 }
@@ -1635,17 +1645,22 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
 
     @Override
     public <T extends Item> PartialList<T> query(final Condition query, String sortBy, final Class<T> clazz, final int offset, final int size) {
-        return query(conditionESQueryBuilderDispatcher.getQueryBuilder(query), sortBy, clazz, offset, size, null, null);
+        return query(conditionESQueryBuilderDispatcher.getQueryBuilder(query), sortBy, clazz, offset, size, null, null, false);
+    }
+
+    @Override
+    public <T extends Item> PartialList<T> query(final Condition query, String sortBy, final Class<T> clazz, boolean returnHiddenFields) {
+        return query(conditionESQueryBuilderDispatcher.getQueryBuilder(query), sortBy, clazz, 0, -1, null, null, returnHiddenFields);
     }
 
     @Override
     public <T extends Item> PartialList<T> query(final Condition query, String sortBy, final Class<T> clazz, final int offset, final int size, final String scrollTimeValidity) {
-        return query(conditionESQueryBuilderDispatcher.getQueryBuilder(query), sortBy, clazz, offset, size, null, scrollTimeValidity);
+        return query(conditionESQueryBuilderDispatcher.getQueryBuilder(query), sortBy, clazz, offset, size, null, scrollTimeValidity, false);
     }
 
     @Override
     public <T extends Item> PartialList<T> queryFullText(final String fulltext, final Condition query, String sortBy, final Class<T> clazz, final int offset, final int size) {
-        return query(QueryBuilders.boolQuery().must(QueryBuilders.queryStringQuery(fulltext)).must(conditionESQueryBuilderDispatcher.getQueryBuilder(query)), sortBy, clazz, offset, size, null, null);
+        return query(QueryBuilders.boolQuery().must(QueryBuilders.queryStringQuery(fulltext)).must(conditionESQueryBuilderDispatcher.getQueryBuilder(query)), sortBy, clazz, offset, size, null, null, false);
     }
 
     @Override
@@ -1655,22 +1670,22 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
 
     @Override
     public <T extends Item> List<T> query(final String fieldName, final String[] fieldValues, String sortBy, final Class<T> clazz) {
-        return query(QueryBuilders.termsQuery(fieldName, ConditionContextHelper.foldToASCII(fieldValues)), sortBy, clazz, 0, -1, getRouting(fieldName, fieldValues, clazz), null).getList();
+        return query(QueryBuilders.termsQuery(fieldName, ConditionContextHelper.foldToASCII(fieldValues)), sortBy, clazz, 0, -1, getRouting(fieldName, fieldValues, clazz), null, false).getList();
     }
 
     @Override
     public <T extends Item> PartialList<T> query(String fieldName, String fieldValue, String sortBy, Class<T> clazz, int offset, int size) {
-        return query(termQuery(fieldName, ConditionContextHelper.foldToASCII(fieldValue)), sortBy, clazz, offset, size, getRouting(fieldName, new String[]{fieldValue}, clazz), null);
+        return query(termQuery(fieldName, ConditionContextHelper.foldToASCII(fieldValue)), sortBy, clazz, offset, size, getRouting(fieldName, new String[]{fieldValue}, clazz), null, false);
     }
 
     @Override
     public <T extends Item> PartialList<T> queryFullText(String fieldName, String fieldValue, String fulltext, String sortBy, Class<T> clazz, int offset, int size) {
-        return query(QueryBuilders.boolQuery().must(QueryBuilders.queryStringQuery(fulltext)).must(termQuery(fieldName, fieldValue)), sortBy, clazz, offset, size, getRouting(fieldName, new String[]{fieldValue}, clazz), null);
+        return query(QueryBuilders.boolQuery().must(QueryBuilders.queryStringQuery(fulltext)).must(termQuery(fieldName, fieldValue)), sortBy, clazz, offset, size, getRouting(fieldName, new String[]{fieldValue}, clazz), null, false);
     }
 
     @Override
     public <T extends Item> PartialList<T> queryFullText(String fulltext, String sortBy, Class<T> clazz, int offset, int size) {
-        return query(QueryBuilders.queryStringQuery(fulltext), sortBy, clazz, offset, size, null, null);
+        return query(QueryBuilders.queryStringQuery(fulltext), sortBy, clazz, offset, size, null, null, false);
     }
 
     @Override
@@ -1678,7 +1693,7 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
         RangeQueryBuilder builder = QueryBuilders.rangeQuery(fieldName);
         builder.from(from);
         builder.to(to);
-        return query(builder, sortBy, clazz, offset, size, null, null);
+        return query(builder, sortBy, clazz, offset, size, null, null, false);
     }
 
     @Override
@@ -1714,7 +1729,8 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
         }.catchingExecuteInClassLoader(true);
     }
 
-    private <T extends Item> PartialList<T> query(final QueryBuilder query, final String sortBy, final Class<T> clazz, final int offset, final int size, final String[] routing, final String scrollTimeValidity) {
+    private <T extends Item> PartialList<T> query(final QueryBuilder query, final String sortBy, final Class<T> clazz, final int offset,
+                                                  final int size, final String[] routing, final String scrollTimeValidity, boolean returnHiddenFields) {
         return new InClassLoaderExecute<PartialList<T>>(metricsService, this.getClass().getName() + ".query", this.bundleContext, this.fatalIllegalStateErrors) {
 
             @Override
@@ -1722,13 +1738,18 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
                 List<T> results = new ArrayList<T>();
                 String scrollIdentifier = null;
                 long totalHits = 0;
+                String[] hiddenFields = null;
                 PartialList.Relation totalHitsRelation = PartialList.Relation.EQUAL;
+
                 try {
                     String itemType = Item.getItemType(clazz);
                     TimeValue keepAlive = TimeValue.timeValueHours(1);
+                    if (!returnHiddenFields) {
+                        hiddenFields = getHiddenFields(clazz.getSimpleName());
+                    }
                     SearchRequest searchRequest = new SearchRequest(getIndexNameForQuery(itemType));
                     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
-                            .fetchSource(true)
+                            .fetchSource(null, hiddenFields)
                             .seqNoAndPrimaryTerm(true)
                             .query(query)
                             .size(size < 0 ? defaultQueryLimit : size)
@@ -1777,6 +1798,7 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
                     }
                     searchSourceBuilder.version(true);
                     searchRequest.source(searchSourceBuilder);
+
                     SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
 
                     if (size == -1) {
@@ -2403,4 +2425,10 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
         return INDEX_DATE_PREFIX + d;
     }
 
+    private String[] getHiddenFields(String itemType) {
+        if (itemTypeToHiddenFields.containsKey(itemType)) {
+            return itemTypeToHiddenFields.get(itemType);
+        }
+        return null;
+    }
 }

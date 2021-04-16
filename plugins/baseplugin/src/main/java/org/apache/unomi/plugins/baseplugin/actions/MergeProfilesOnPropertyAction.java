@@ -89,7 +89,7 @@ public class MergeProfilesOnPropertyAction implements ActionExecutor {
         c.setParameter("operator", "and");
         c.setParameter("subConditions", Arrays.asList(propertyCondition, excludeMergedProfilesCondition));
 
-        final List<Profile> profiles = persistenceService.query(c, "properties.firstVisit", Profile.class);
+        final List<Profile> profiles = persistenceService.query(c, "properties.firstVisit", Profile.class, true).getList();
 
         // Check if the user switched to another profile
         if (StringUtils.isNotEmpty(mergeProfilePreviousPropertyValue) && !mergeProfilePreviousPropertyValue.equals(mergeProfilePropertyValue)) {
