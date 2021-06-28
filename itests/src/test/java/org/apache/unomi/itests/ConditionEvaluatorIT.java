@@ -140,6 +140,9 @@ public class ConditionEvaluatorIT extends BaseIT {
         assertTrue(eval(builder.profileProperty("properties.age").in(31, 30).build()));
         assertTrue(eval(builder.profileProperty("properties.age").notIn(25, 26).build()));
         assertFalse(eval(builder.profileProperty("properties.age").notIn(25, 30).build()));
+
+        assertTrue(eval(builder.profileProperty("properties.fieldNotExists").notIn(25, 30).build()));
+        assertTrue(eval(builder.profileProperty("properties.fieldNotExists").notEqualTo(1).build()));
     }
 
     @Test
