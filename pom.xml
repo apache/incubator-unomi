@@ -65,7 +65,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <cxf.version>3.3.4</cxf.version>
-        <version.jackson.core>2.9.10</version.jackson.core>
+        <version.jackson.core>2.12.3</version.jackson.core>
         <version.jackson.databind>2.9.10.8</version.jackson.databind>
         <version.jackson.jaxb>2.9.10</version.jackson.jaxb>
         <version.karaf>4.2.8</version.karaf>
