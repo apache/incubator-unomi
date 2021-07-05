@@ -62,8 +62,7 @@ import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.get.GetRequest;
-import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.get.*;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.ClearScrollRequest;
@@ -168,6 +167,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.index.query.QueryBuilders.termQuery;
@@ -792,39 +792,50 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
         return load(itemId, null, clazz);
     }
 
-    @Override
-    public <T extends Item> T load(final String itemId, final Date dateHint, final Class<T> clazz) {
-        return new InClassLoaderExecute<T>(metricsService, this.getClass().getName() + ".loadItem", this.bundleContext, this.fatalIllegalStateErrors) {
-            protected T execute(Object... args) throws Exception {
+
+    public <T extends Item> List<T> load(final Date dateHint, final Class<T> clazz, final String... itemIds) {
+        return new InClassLoaderExecute<List<T>>(metricsService, this.getClass().getName() + ".loadItems", this.bundleContext, this.fatalIllegalStateErrors) {
+            protected List<T> execute(Object... args) throws Exception {
+                List<T> matchedItemsList = new ArrayList<>();
+                String itemId = null;
                 try {
                     String itemType = Item.getItemType(clazz);
-                    T itemFromCache = getFromCache(itemId, clazz);
-                    if (itemFromCache != null) {
-                        return itemFromCache;
-                    }
-
                     if (itemsMonthlyIndexed.contains(itemType) && dateHint == null) {
-                        return new MetricAdapter<T>(metricsService, ".loadItemWithQuery") {
+                        return new MetricAdapter<List<T>>(metricsService, ".loadItemWithQuery") {
                             @Override
-                            public T execute(Object... args) throws Exception {
-                                PartialList<T> r = query(QueryBuilders.idsQuery().addIds(itemId), null, clazz, 0, 1, null, null);
-                                if (r.size() > 0) {
-                                    return r.get(0);
-                                }
-                                return null;
+                            public List<T> execute(Object... args) throws Exception {
+                                PartialList<T> r = query(QueryBuilders.idsQuery().addIds(itemIds), null, clazz, 0, -1, null, null);
+                                return r.getList();
                             }
                         }.execute();
                     } else {
-                        GetRequest getRequest = new GetRequest(getIndex(itemType, dateHint), itemId);
-                        GetResponse response = client.get(getRequest, RequestOptions.DEFAULT);
-                        if (response.isExists()) {
-                            String sourceAsString = response.getSourceAsString();
-                            final T value = ESCustomObjectMapper.getObjectMapper().readValue(sourceAsString, clazz);
-                            setMetadata(value, response.getId(), response.getVersion(), response.getSeqNo(), response.getPrimaryTerm());
-                            putInCache(itemId, value);
-                            return value;
-                        } else {
-                            return null;
+                        MultiGetRequest mgetRequest = new MultiGetRequest();
+                        String index = getIndex(itemType, dateHint);
+                        for (String id: itemIds) {
+                            T itemFromCache = getFromCache(id, clazz);
+                            if (itemFromCache != null) {
+                                matchedItemsList.add(itemFromCache);
+                            }
+                            else {
+                                mgetRequest.add(new MultiGetRequest.Item(index, id));
+                            }
+                        }
+                        MultiGetResponse multiResponse = client.mget(mgetRequest, RequestOptions.DEFAULT);
+                        MultiGetItemResponse[] itemsResponse = multiResponse.getResponses();
+                        for(int responseIndex = 0; responseIndex < itemsResponse.length; ++responseIndex) {
+                            MultiGetItemResponse itemResponse = multiResponse.getResponses()[responseIndex];
+                            GetResponse response = itemResponse.getResponse();
+                            itemId = response.getId();
+                            if (response.isExists()) {
+                                String sourceAsString = response.getSourceAsString();
+                                final T value = ESCustomObjectMapper.getObjectMapper().readValue(sourceAsString, clazz);
+                                setMetadata(value, itemId, response.getVersion(), response.getSeqNo(), response.getPrimaryTerm());
+                                putInCache(itemId, value);
+                                matchedItemsList.add(value);
+                            } else {
+                                logger.warn("Could not find document with itemId {}, in index {}", itemId, index);
+                            }
+
                         }
                     }
                 } catch (ElasticsearchStatusException ese) {
@@ -839,9 +850,16 @@ public class ElasticSearchPersistenceServiceImpl implements PersistenceService, 
                 } catch (Exception ex) {
                     throw new Exception("Error loading itemType=" + clazz.getName() + " itemId=" + itemId, ex);
                 }
+                return matchedItemsList;
             }
         }.catchingExecuteInClassLoader(true);
 
+    }
+
+    @Override
+    public <T extends Item> T load(final String itemId, final Date dateHint, final Class<T> clazz) {
+        List<T> itemList = load(dateHint, clazz, itemId);
+        return (itemList != null && !itemList.isEmpty()) ? itemList.get(0) : null;
     }
 
     private void setMetadata(Item item, String id, long version, long seqNo, long primaryTerm) {
