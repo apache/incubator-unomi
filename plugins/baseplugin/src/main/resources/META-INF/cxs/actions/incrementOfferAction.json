@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "id": "incrementOfferAction",
+    "name": "incrementOfferAction",
+    "description": "",
+    "systemTags": [
+      "profileTags",
+      "event"
+    ],
+    "readOnly": true
+  },
+  "actionExecutor": "incrementOfferAction",
+  "parameters": []
+}
