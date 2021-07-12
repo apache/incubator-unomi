@@ -43,6 +43,7 @@
             <cm:property name="rules.refresh.interval" value="1000"/>
             <cm:property name="rules.statistics.refresh.interval" value="10000"/>
             <cm:property name="events.shouldBeCheckedEventSourceId" value="false"/>
+            <cm:property name="rules.optimizationActivated" value="true"/>
         </cm:default-properties>
     </cm:property-placeholder>
 
@@ -165,6 +166,7 @@
         <property name="schedulerService" ref="schedulerServiceImpl"/>
         <property name="rulesRefreshInterval" value="${services.rules.refresh.interval}"/>
         <property name="rulesStatisticsRefreshInterval" value="${services.rules.statistics.refresh.interval}"/>
+        <property name="optimizedRulesActivated" value="${services.rules.optimizationActivated}"/>
     </bean>
     <service id="rulesService" ref="rulesServiceImpl">
         <interfaces>

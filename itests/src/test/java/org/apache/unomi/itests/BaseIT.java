@@ -40,16 +40,18 @@ import org.ops4j.pax.exam.spi.reactors.ExamReactorStrategy;
 import org.ops4j.pax.exam.spi.reactors.PerSuite;
 import org.ops4j.pax.exam.util.Filter;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceEvent;
+import org.osgi.framework.ServiceListener;
+import org.osgi.framework.ServiceReference;
+import org.osgi.service.cm.ConfigurationAdmin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -86,6 +88,10 @@ public abstract class BaseIT {
 
     @Inject @Filter(timeout = 600000)
     protected BundleWatcher bundleWatcher;
+
+    @Inject
+    @Filter(timeout = 600000)
+    protected ConfigurationAdmin configurationAdmin;
 
     @Before
     public void waitForStartup() throws InterruptedException {
@@ -262,6 +268,69 @@ public abstract class BaseIT {
         }
         ObjectMapper objectMapper = CustomObjectMapper.getObjectMapper();
         return objectMapper.writeValueAsString(objectMapper.readTree(jsonString));
+    }
+
+    public void updateServices() throws InterruptedException {
+        persistenceService = getService(PersistenceService.class);
+        definitionsService = getService(DefinitionsService.class);
+    }
+
+    public void updateConfiguration(String serviceName, String configPid, String propName, Object propValue) throws InterruptedException, IOException {
+        org.osgi.service.cm.Configuration cfg = configurationAdmin.getConfiguration(configPid);
+        Dictionary<String, Object> props = cfg.getProperties();
+        props.put(propName, propValue);
+
+        waitForReRegistration(serviceName, () -> {
+            try {
+                cfg.update(props);
+            } catch (IOException ignored) {
+            }
+        });
+
+        waitForStartup();
+
+        // we must update our service objects now
+        updateServices();
+    }
+
+    public void waitForReRegistration(String serviceName, Runnable trigger) throws InterruptedException {
+        CountDownLatch latch1 = new CountDownLatch(2);
+        ServiceListener serviceListener = e -> {
+            LOGGER.info("Service {} {}", e.getServiceReference().getProperty("objectClass"), serviceEventTypeToString(e));
+            if ((e.getType() == ServiceEvent.UNREGISTERING || e.getType() == ServiceEvent.REGISTERED)
+                    && ((String[])e.getServiceReference().getProperty("objectClass"))[0].equals(serviceName)) {
+                latch1.countDown();
+            }
+        };
+        bundleContext.addServiceListener(serviceListener);
+        trigger.run();
+        latch1.await();
+        bundleContext.removeServiceListener(serviceListener);
+    }
+
+    public String serviceEventTypeToString(ServiceEvent serviceEvent) {
+        switch (serviceEvent.getType()) {
+            case ServiceEvent.MODIFIED:
+                return "modified";
+            case ServiceEvent.REGISTERED:
+                return "registered";
+            case ServiceEvent.UNREGISTERING:
+                return "unregistering";
+            case ServiceEvent.MODIFIED_ENDMATCH:
+                return "modified endmatch";
+            default:
+                return "unknown type " + serviceEvent.getType();
+        }
+    }
+
+    public <T> T getService(Class<T> serviceClass) throws InterruptedException {
+        ServiceReference<T> serviceReference = bundleContext.getServiceReference(serviceClass);
+        while (serviceReference == null) {
+            LOGGER.info("Waiting for service {} to become available", serviceClass.getName());
+            Thread.sleep(1000);
+            serviceReference = bundleContext.getServiceReference(serviceClass);
+        }
+        return bundleContext.getService(serviceReference);
     }
 
 }

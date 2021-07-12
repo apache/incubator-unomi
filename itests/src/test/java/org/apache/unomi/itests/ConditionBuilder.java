@@ -63,6 +63,10 @@ public class ConditionBuilder {
         return new PropertyCondition(conditionTypeId, propertyName, definitionsService);
     }
 
+    public ConditionItem condition(String conditionTypeId) {
+        return new ConditionItem(conditionTypeId, definitionsService);
+    }
+
     public abstract class ComparisonCondition extends ConditionItem {
 
         ComparisonCondition(String conditionTypeId, DefinitionsService definitionsService) {
@@ -287,7 +291,7 @@ public class ConditionBuilder {
         }
     }
 
-    public abstract class ConditionItem {
+    public class ConditionItem {
 
         protected Condition condition;
 

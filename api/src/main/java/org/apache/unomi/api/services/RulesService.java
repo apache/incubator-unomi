@@ -17,6 +17,7 @@
 
 package org.apache.unomi.api.services;
 
+import org.apache.unomi.api.Event;
 import org.apache.unomi.api.Item;
 import org.apache.unomi.api.Metadata;
 import org.apache.unomi.api.PartialList;
@@ -104,4 +105,17 @@ public interface RulesService {
      * @return the Set of tracked conditions for the specified item
      */
     Set<Condition> getTrackedConditions(Item item);
+
+    /**
+     * Retrieves all the matching rules for a specific event
+     * @param event the event we want to retrieve all the matching rules for
+     * @return a set of rules that match the event passed in the parameters
+     */
+    public Set<Rule> getMatchingRules(Event event);
+
+    /**
+     * Refresh the rules for this instance by reloading them from the persistence backend
+     */
+    public void refreshRules();
+
 }

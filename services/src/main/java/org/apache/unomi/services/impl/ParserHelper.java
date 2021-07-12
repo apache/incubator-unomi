@@ -63,6 +63,10 @@ public class ParserHelper {
                     }
                 }
             }
+
+            @Override
+            public void postVisit(Condition condition) {
+            }
         });
         return result.isEmpty();
     }
@@ -73,6 +77,11 @@ public class ParserHelper {
             @Override
             public void visit(Condition condition) {
                 result.add(condition.getConditionTypeId());
+            }
+
+            @Override
+            public void postVisit(Condition condition) {
+
             }
         });
         return result;
@@ -145,5 +154,49 @@ public class ParserHelper {
 
     interface ConditionVisitor {
         void visit(Condition condition);
+        void postVisit(Condition condition);
+    }
+
+    public static Set<String> resolveConditionEventTypes(Condition rootCondition) {
+        if (rootCondition == null) {
+            return new HashSet<>();
+        }
+        EventTypeConditionVisitor eventTypeConditionVisitor = new EventTypeConditionVisitor();
+        visitConditions(rootCondition, eventTypeConditionVisitor);
+        return eventTypeConditionVisitor.getEventTypeIds();
+    }
+
+    static class EventTypeConditionVisitor implements ConditionVisitor {
+
+        private Set<String> eventTypeIds = new HashSet<>();
+        private Stack<String> conditionTypeStack = new Stack<>();
+
+        public void visit(Condition condition) {
+            conditionTypeStack.push(condition.getConditionTypeId());
+             if ("eventTypeCondition".equals(condition.getConditionTypeId())) {
+                String eventTypeId = (String) condition.getParameter("eventTypeId");
+                if (eventTypeId == null) {
+                    logger.warn("Null eventTypeId found!");
+                } else {
+                    // we must now check the stack to see how many notConditions we have in the parent stack
+                    if (conditionTypeStack.contains("notCondition")) {
+                        logger.warn("Found complex negative event type condition, will always evaluate rule");
+                        eventTypeIds.add("*");
+                    } else {
+                        eventTypeIds.add(eventTypeId);
+                    }
+                }
+            } else if (condition.getConditionType().getParentCondition() != null) {
+                visitConditions(condition.getConditionType().getParentCondition(), this);
+            }
+        }
+
+        public void postVisit(Condition condition) {
+            conditionTypeStack.pop();
+        }
+
+        public Set<String> getEventTypeIds() {
+            return eventTypeIds;
+        }
     }
 }

@@ -50,6 +50,7 @@ import org.junit.runners.Suite.SuiteClasses;
         PatchIT.class,
         ContextServletIT.class,
         SecurityIT.class,
+        RuleServiceIT.class,
         GraphQLEventIT.class,
         GraphQLListIT.class,
         GraphQLProfileIT.class,
