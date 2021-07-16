@@ -11,7 +11,7 @@
   "author": "Apache Software Foundation",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "yarn browserify && yarn snippet:browserify && yarn replace && yarn minify && yarn snippet:minify",
+    "build": "yarn browserify && yarn snippet:browserify && yarn replace && yarn minify && yarn snippet:minify && yarn autoclean",
     "browserify": "browserify src/index.js -p [ browserify-header --file src/license.js ] -s unomiTracker -o dist/unomi-tracker.js",
     "snippet:browserify": "browserify src/snippet.js -o dist/snippet.js",
     "replace": "replace-in-file 'analytics.require = require' '//analytics.require = require' dist/unomi-tracker.js",
